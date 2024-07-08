@@ -290,6 +290,111 @@ async def send_embed(ctx, channel: discord.TextChannel, new_description: str = N
 async def send_embed_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("Veuillez mentionner le salon où envoyer l'embed. Exemple : `!sendembed #nom-du-salon [Nouvelle description de l'embed]`")
+
+## BOT AIDE POUR LES APPRENANTS
+
+
+# Remplacez selon le message et le rôle à donner pour les aides !
+# MESSAGE_ID = 1256205265401937960  # ID du message à surveiller
+ROLE_ID = 1245022484902707243  # Remplacez par l'ID du rôle à attribuer
+HELP_CHANNEL_ID = 1245022636367675517
+
+ROLE_1 = 1245022492230156381  # P1 2023
+ROLE_2 = 1245022493371011135  # P2 2023
+ROLE_3 = 1245022489835339859  # P1 2024
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.user_id == bot.user.id:
+        return  # Si c'est le bot qui a réagi, ne rien faire
+
+    if payload.message_id == last_embed_message_id[payload.channel_id]:
+        guild = bot.get_guild(payload.guild_id)
+        role = guild.get_role(ROLE_ID)
+        member = guild.get_member(payload.user_id)
+
+        if member and role:
+            channel = bot.get_channel(payload.channel_id)
+            message = await channel.fetch_message(payload.message_id)
+
+            if payload.emoji.name == "🆘":
+                await member.add_roles(role)
+                # Modifier le pseudo de l'utilisateur
+                new_nickname = f"🚨 {member.display_name}"
+                try:
+                    await member.edit(nick=new_nickname)
+                except discord.Forbidden:
+                    print(f"Je n'ai pas la permission de changer le pseudo de {member}.")
+
+                if member:
+                    # Vérifier si le membre possède le rôle spécifique
+                    has_role_1 = any(role.id == ROLE_1 for role in member.roles)
+                    has_role_2 = any(role.id == ROLE_2 for role in member.roles)
+                    has_role_3 = any(role.id == ROLE_3 for role in member.roles)
+
+                    # Déterminer dans quel canal envoyer le message en fonction de la possession du rôle
+                    if has_role_1:
+                        help_channel_id = 1245022642109419585  # ID du canal P1 2023
+                    elif has_role_2:
+                        help_channel_id = 1245022643590266950  # ID du canal P2 2023
+                    elif has_role_3:
+                        help_channel_id = 1245022648577163387  # ID du canal P1 2024
+                    else:
+                        help_channel_id = 1245022628658548778  # ID du canal par défaut
+
+                    help_channel = bot.get_channel(help_channel_id)
+                    if help_channel:
+                        await help_channel.send(f"<@{member.id}> a besoin d'aide.")
+                    else:
+                        print(f"Le canal d'ID {help_channel_id} n'a pas été trouvé.")
+
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    if payload.user_id == bot.user.id:
+        return  # Si c'est le bot qui a retiré la réaction, ne rien faire
+
+    if payload.message_id == last_embed_message_id[payload.channel_id]:
+        guild = bot.get_guild(payload.guild_id)
+        role = guild.get_role(ROLE_ID)
+        member = guild.get_member(payload.user_id)
+
+        if member and role:
+            await member.remove_roles(role)
+            # Restaurer le pseudo d'origine de l'utilisateur
+            if member.display_name.startswith("🚨"):
+                original_nickname = member.display_name.replace("🚨 ", "")
+                try:
+                    await member.edit(nick=original_nickname)
+                except discord.Forbidden:
+                    print(f"Je n'ai pas la permission de changer le pseudo de {member}.")
+
+                if member:
+                    # Vérifier si le membre possède le rôle spécifique
+                    has_role_1 = any(role.id == ROLE_1 for role in member.roles)
+                    has_role_2 = any(role.id == ROLE_2 for role in member.roles)
+                    has_role_3 = any(role.id == ROLE_3 for role in member.roles)
+
+                    # Déterminer dans quel canal envoyer le message en fonction de la possession du rôle
+                    if has_role_1:
+                        help_channel_id = 1245022642109419585  # ID du canal P1 2023
+                    elif has_role_2:
+                        help_channel_id = 1245022643590266950  # ID du canal P2 2023
+                    elif has_role_3:
+                        help_channel_id = 1245022648577163387  # ID du canal P1 2024
+                    else:
+                        help_channel_id = 1245022628658548778  # ID du canal par défaut
+
+                    help_channel = bot.get_channel(help_channel_id)
+                    if help_channel:
+                        async for message in help_channel.history(limit=None):
+                            if f"<@{member.id}> a besoin d'aide." in message.content:
+                                await message.delete()
+                                break
+                    else:
+                        print(f"Le canal d'ID {help_channel_id} n'a pas été trouvé.")
+
+
+
         
 token = os.getenv('TOKEN')
 bot.run(token)
