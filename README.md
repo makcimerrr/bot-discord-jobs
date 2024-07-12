@@ -14,10 +14,12 @@ Pour utiliser ce bot, vous devez :
 1. Avoir Python 3.7+ installé.
 2. Installer les dépendances nécessaires via `pip install -r requirements.txt`.
 3. Définir les variables d'environnement requises, notamment le TOKEN Discord.
+4. Éditer les id des channels et rôles, dans config.json, pour l'envoie et le ping des messages.
 
 ## Variables d'Environnement
 
 - `TOKEN`: Token d'authentification de votre bot Discord.
+- `RAPID KEY`: Token pour l'accès aux API de [rapid](https://rapidapi.com/)
 
 ## Utilisation
 
@@ -32,8 +34,8 @@ Si vous souhaitez contribuer à ce projet, vous pouvez :
 
 ## Auteurs
 
-Ce bot a été créé par [Votre Nom] pour [Nom du Serveur Discord].
+Ce bot a été créé par [Maxime Dubois](https://makcimerrr.com) pour [Zone01 Rouen](https://zone01rouennormandie.org).
 
 ## Licence
 
-Ce projet est sous licence MIT. Pour plus de détails, consultez le fichier LICENSE.
+Ce projet est sous licence MIT. Pour plus de détails, consultez le fichier [LICENSE](https://github.com/makcimerrr/bot-discord-zone01/blob/main/LICENSE).
