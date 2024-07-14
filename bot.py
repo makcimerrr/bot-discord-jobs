@@ -5,6 +5,7 @@ import requests
 import asyncio
 import json
 from discord.ext import commands, tasks
+from discord.ui import Button, View
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 from dotenv import load_dotenv  # Import dotenv module
@@ -36,7 +37,7 @@ def fetch_new_jobs():
         "query": "Developer fullstack in rouen, France",
         "page": "1",
         "num_pages": "1",
-        "date_posted": "all",
+        "date_posted": "week",
         "employment_types": "INTERN",
         "radius": "120"
     }
@@ -407,6 +408,149 @@ class SupremeHelpCommand(commands.HelpCommand):
 
 
 bot.help_command = SupremeHelpCommand(command_attrs=attributes)
+
+last_embed_message_id = {}
+
+ALLOWED_ROLE_ID = config["role_admin"]
+DEFAULT_EMBED_DESCRIPTION = config["default_description"]
+ROLE_HELP = config["role_help"]
+ROLE_1 = config["role_P1_2023"]
+ROLE_2 = config["role_P2_2023"]
+ROLE_3 = config["role_P1_2024"]
+
+
+class RoleView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.is_open = True
+
+    @discord.ui.button(label="Ouvrir", style=discord.ButtonStyle.green, custom_id="open_button")
+    async def open_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        role = discord.utils.get(interaction.guild.roles, id=ALLOWED_ROLE_ID)
+        if role in interaction.user.roles:
+            self.is_open = True
+            await interaction.response.send_message("Les demandes de rôle sont maintenant ouvertes.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Vous n'avez pas la permission d'utiliser ce bouton.", ephemeral=True)
+
+    @discord.ui.button(label="Fermer", style=discord.ButtonStyle.red, custom_id="close_button")
+    async def close_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        role = discord.utils.get(interaction.guild.roles, id=ALLOWED_ROLE_ID)
+        if role in interaction.user.roles:
+            self.is_open = False
+            await interaction.response.send_message("Les demandes de rôle sont maintenant fermées.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Vous n'avez pas la permission d'utiliser ce bouton.", ephemeral=True)
+
+    @discord.ui.button(label="Demander un rôle", style=discord.ButtonStyle.primary, custom_id="request_role_button")
+    async def request_role_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if self.is_open:
+            role = interaction.guild.get_role(ROLE_HELP)
+            await interaction.user.add_roles(role)
+            new_nickname = f"🚨 {interaction.user.display_name}"
+            try:
+                await interaction.user.edit(nick=new_nickname)
+                await interaction.response.send_message("Vous avez reçu le rôle et votre pseudo a été mis à jour.", ephemeral=True)
+            except discord.Forbidden:
+                await interaction.response.send_message("Je n'ai pas la permission de changer votre pseudo, mais vous avez reçu le rôle.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Les demandes de rôle sont actuellement fermées.", ephemeral=True)
+
+@bot.command(name='sendembed')
+async def send_embed(ctx, channel: discord.TextChannel, new_description: str = None):
+    """Envoie un embed dans le salon spécifié avec une description personnalisée."""
+    # Vérifie si l'utilisateur a le rôle autorisé
+    role = discord.utils.get(ctx.guild.roles, id=ALLOWED_ROLE_ID)
+    if role not in ctx.author.roles:
+        # Crée un embed temporaire
+        embed = discord.Embed(title="Erreur de permission",
+                              description="Vous n'avez pas la permission d'utiliser cette commande.",
+                              color=discord.Color.red())
+
+        # Envoie l'embed
+        message = await ctx.send(embed=embed)
+
+        # Supprime l'embed et le message de l'utilisateur après 10 secondes
+        await asyncio.sleep(10)
+        await message.delete()
+        await ctx.message.delete()
+        return
+
+    # Créer l'embed avec la description par défaut ou la nouvelle description si fournie
+    embed_description = new_description or (
+        "Pour demander de l'aide auprès d'autres apprenants de ta promo, clique sur le bouton ci-dessous\n\n> Une fois ta demande effectuée, tu te verras attribuer un rôle et un pseudo. Des apprenants viendront sous peu t'apporter de l'aide !"
+    )
+
+    embed = discord.Embed(title="Besoin d'aide ?",
+                          description=embed_description,
+                          colour=0x002e7a,
+                          timestamp=discord.utils.utcnow())
+
+    embed.set_author(name="Info")
+    embed.set_footer(text="Zone01",
+                     icon_url="https://zone01rouennormandie.org/wp-content/uploads/2024/03/01talent-profil-400x400-1.jpg")
+
+    view = RoleView()
+
+    # Rechercher les messages dans le salon pour un embed existant
+    async for message in channel.history(limit=100):
+        if message.embeds:
+            existing_embed = message.embeds[0]
+            if existing_embed.title == "Besoin d'aide ?":  # Vous pouvez ajouter plus de conditions si nécessaire
+                # Mettre à jour l'embed existant
+                await message.edit(embed=embed, view=view)
+                await ctx.send(f"Embed mis à jour dans {channel.mention}")
+                return
+
+    # Si aucun embed précédent n'est trouvé, envoyer un nouveau embed
+    await channel.send(embed=embed, view=view)
+    await ctx.send(f"Nouvel embed envoyé à {channel.mention}")
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    if payload.user_id == bot.user.id:
+        return  # Si c'est le bot qui a retiré la réaction, ne rien faire
+
+    if payload.message_id == last_embed_message_id[payload.channel_id]:
+        guild = bot.get_guild(payload.guild_id)
+        role = guild.get_role(ROLE_HELP)
+        member = guild.get_member(payload.user_id)
+
+        if member and role:
+            await member.remove_roles(role)
+            # Restaurer le pseudo d'origine de l'utilisateur
+            if member.display_name.startswith("🚨"):
+                original_nickname = member.display_name.replace("🚨 ", "")
+                try:
+                    await member.edit(nick=original_nickname)
+                except discord.Forbidden:
+                    print(f"Je n'ai pas la permission de changer le pseudo de {member}.")
+
+            if member:
+                # Vérifier si le membre possède le rôle spécifique
+                has_role_1 = any(role.id == ROLE_1 for role in member.roles)
+                has_role_2 = any(role.id == ROLE_2 for role in member.roles)
+                has_role_3 = any(role.id == ROLE_3 for role in member.roles)
+
+                # Déterminer dans quel canal envoyer le message en fonction de la possession du rôle
+                if has_role_1:
+                    help_channel_id = 1245022642109419585  # ID du canal P1 2023
+                elif has_role_2:
+                    help_channel_id = 1245022643590266950  # ID du canal P2 2023
+                elif has_role_3:
+                    help_channel_id = 1245022648577163387  # ID du canal P1 2024
+                else:
+                    help_channel_id = 1245022628658548778  # ID du canal par défaut
+
+                help_channel = bot.get_channel(help_channel_id)
+                if help_channel:
+                    async for message in help_channel.history(limit=None):
+                        if f"<@{member.id}> a besoin d'aide." in message.content:
+                            await message.delete()
+                            break
+                else:
+                    print(f"Le canal d'ID {help_channel_id} n'a pas été trouvé.")
+
 
 token = os.getenv('TOKEN')
 bot.run(token)
